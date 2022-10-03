@@ -1,41 +1,35 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.main__container {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.storage__container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.storage-type-list__container ul {
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.storage-type-list__container ul li {
+  list-style: none;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
 }
-
-.card {
-  padding: 2em;
+.storage-type-list__container ul li:first-child {
+  transform-origin: right;
 }
-
-.read-the-docs {
-  color: #888;
+.storage-type-list__container ul li:last-child {
+  transform-origin: left;
+}
+.storage-type-list__container ul li:hover {
+  transform: scale(1.1);
 }
