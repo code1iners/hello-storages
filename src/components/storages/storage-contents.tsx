@@ -8,18 +8,20 @@ import SessionStorage from "@/components/storages/session-storage";
 export default function StorageContents() {
   const currentStorageType = useRecoilValue(currentStorageTypeAtom);
 
-  const renderComponent = () => {
-    switch (currentStorageType) {
-      case StorageType.IndexedDB:
-        return IndexedDb();
+  return (
+    <div>
+      {(() => {
+        switch (currentStorageType) {
+          case StorageType.IndexedDB:
+            return <IndexedDb />;
 
-      case StorageType.LocalStorage:
-        return LocalStorage();
+          case StorageType.LocalStorage:
+            return <LocalStorage />;
 
-      case StorageType.SessionStorage:
-        return SessionStorage();
-    }
-  };
-
-  return <div>{renderComponent()}</div>;
+          case StorageType.SessionStorage:
+            return <SessionStorage />;
+        }
+      })()}
+    </div>
+  );
 }
