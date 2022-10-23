@@ -1,19 +1,24 @@
 import { debug } from "@/helpers/debug-helpers";
-
-interface UseIndexedDatabaseInput {
-  databaseName: string;
-  databaseVersion?: number;
-}
-
-interface TodoItem {
-  task: string;
-  done: boolean;
-}
+import {
+  AddRowProperties,
+  RemoveRowProperties,
+  ClearObjectStoreByNameProps,
+  CreateObjectStoreProps,
+  DeleteObjectStoreByNameProps,
+  OpenDatabaseProperties,
+  OpenDatabaseReturns,
+  TransactionMode,
+  UseIndexedDatabaseInputs,
+} from "@/libs/storage-helpers/use-indexed-database/types";
 
 export const useIndexedDatabase = ({
   databaseName,
-  databaseVersion,
-}: UseIndexedDatabaseInput) => {
+  databaseVersion = 1,
+  onSuccessCallback,
+  onErrorCallback,
+  onBlockedCallback,
+  onUpgradeneededCallback,
+}: UseIndexedDatabaseInputs) => {
   // Declared variables.
   const REQUEST_DOES_NOT_READY = "IndexedDB request does not ready.";
   let __request__: IDBOpenDBRequest | undefined = undefined;
@@ -30,6 +35,7 @@ export const useIndexedDatabase = ({
           title: "onBlocked",
           description: REQUEST_DOES_NOT_READY,
           debugLevel: "warning",
+          parameters: { readyState },
         });
         return;
       }
@@ -39,12 +45,16 @@ export const useIndexedDatabase = ({
         debugLevel: "error",
         description: "Please close all other tabs with this site open!",
       });
+
+      // Execute callback.
+      onBlockedCallback && onBlockedCallback();
     } catch (error) {
       debug({
         title: "onBlocked",
         flag: "catch",
         debugLevel: "error",
         description: (error as any).message,
+        parameters: { event },
       });
     }
   };
@@ -52,23 +62,17 @@ export const useIndexedDatabase = ({
   const onError = (event: Event) => {
     try {
       const { readyState, error } = event.target as IDBOpenDBRequest;
-      if (readyState !== "done") {
-        debug({
-          title: "onError",
-          description: REQUEST_DOES_NOT_READY,
-          debugLevel: "warning",
-        });
-
-        return;
-      }
 
       debug({
         title: "onError",
-        parameters: {
-          message: error?.message,
-          name: error?.name,
-        },
+        debugLevel: "warning",
+        flag: error?.name,
+        description: error?.message,
+        parameters: { readyState },
       });
+
+      // Execute callback.
+      onErrorCallback && onErrorCallback(event);
     } catch (error) {
       debug({
         title: "onError",
@@ -82,24 +86,28 @@ export const useIndexedDatabase = ({
   const onSuccess = (event: Event) => {
     try {
       const { readyState, result } = event.target as IDBOpenDBRequest;
+      setDatabase(result);
+
       // Declared parameters for log.
-      const parameters = { name: result.name, version: result.version };
+      const parameters = {
+        name: result.name,
+        version: result.version,
+        objectStoreNames: result.objectStoreNames,
+      };
+
       if (readyState !== "done") {
-        debug({
+        return debug({
           title: "onSuccess",
           description: REQUEST_DOES_NOT_READY,
           debugLevel: "warning",
           parameters,
         });
-        return;
       }
 
-      __database__ = result;
+      debug({ title: "onSuccess", parameters });
 
-      debug({
-        title: "onSuccess",
-        parameters,
-      });
+      // Execute callback.
+      onSuccessCallback && onSuccessCallback(result);
     } catch (error) {
       debug({
         title: "onSuccess",
@@ -113,27 +121,16 @@ export const useIndexedDatabase = ({
   const onUpgradeNeeded = (event: IDBVersionChangeEvent) => {
     try {
       const target = event.target as IDBOpenDBRequest;
-      const db = target.result as IDBDatabase;
+      const database = target.result as IDBDatabase;
+      setDatabase(database);
 
       debug({
         title: "onUpgradeNeeded",
-        flag: "start",
-        parameters: { result: target.result, database: db },
+        parameters: { result: target.result, database },
       });
 
-      switch (db.version) {
-        case 1:
-          const versionOneStore = db.createObjectStore("todos", {
-            autoIncrement: true,
-            keyPath: "todoId",
-          });
-
-          break;
-        case 2:
-          break;
-        case 3:
-          break;
-      }
+      // Execute callback.
+      onUpgradeneededCallback && onUpgradeneededCallback(database);
     } catch (error) {
       debug({
         title: "onUpgradeNeeded",
@@ -145,22 +142,78 @@ export const useIndexedDatabase = ({
   };
 
   /**
-   * Getting database object store.
+   * Create database object store.
+   * Call this method in onUpgradeneededCallback.
    */
-  const getObjectStore = (
-    storeName: string,
-    mode: "readonly" | "readwrite"
-  ) => {
-    if (!__database__) return null;
-    const transaction = __database__.transaction(storeName, mode);
-    return transaction.objectStore(storeName);
+  const createObjectStore = <T>({
+    storeName,
+    options,
+    indexOptions,
+  }: CreateObjectStoreProps<T>) => {
+    try {
+      const database = getDatabase();
+      if (!database) throw new Error("Database does not found.");
+
+      const createdObjectStore = database.createObjectStore(
+        storeName,
+        options as IDBObjectStoreParameters
+      );
+      const createdIndexList: IDBIndex[] = [];
+
+      // Has object store indexOptions.
+      if (indexOptions && Array.isArray(indexOptions) && indexOptions.length) {
+        indexOptions.forEach(({ name, keyPath, options }) => {
+          const createdIndex = createdObjectStore.createIndex(
+            name as string,
+            keyPath as string | Iterable<string>,
+            options
+          );
+          createdIndexList.push(createdIndex);
+        });
+      }
+
+      return {
+        objectStore: createdObjectStore,
+        indexList: createdIndexList,
+      };
+    } catch (error) {
+      debug({
+        title: "createObjectStore",
+        debugLevel: "error",
+        flag: "catch",
+        description: (error as any).message,
+      });
+    }
   };
 
   /**
-   * Clear database stores.
+   * Retrieve database object store.
    */
-  const clearObjectStore = (storeName: string) => {
-    const store = getObjectStore(storeName, "readwrite");
+  const retrieveObjectStore = (
+    storeName: string,
+    mode: TransactionMode = "readonly"
+  ) => getTransaction(storeName, mode)?.objectStore(storeName);
+
+  /**
+   * Getting transaction of object store.
+   */
+  const getTransaction = (
+    storeName: string,
+    mode: TransactionMode = "readonly"
+  ) => {
+    const database = getDatabase();
+    return database ? database.transaction(storeName, mode) : null;
+  };
+
+  /**
+   * Clear database store by store name.
+   */
+  const clearObjectStoreByName = ({
+    storeName,
+    onSuccessCallback,
+    onErrorCallback,
+  }: ClearObjectStoreByNameProps) => {
+    const store = retrieveObjectStore(storeName, "readwrite");
     if (!store) return;
 
     const request = store.clear();
@@ -169,10 +222,12 @@ export const useIndexedDatabase = ({
       "success",
       (event: Event) => {
         debug({
-          title: "clearObjectStore",
+          title: "clearObjectStoreByName",
           flag: "success",
           parameters: { event },
         });
+
+        onSuccessCallback && onSuccessCallback(event);
       },
       false
     );
@@ -181,25 +236,53 @@ export const useIndexedDatabase = ({
       "error",
       (event: Event) => {
         debug({
-          title: "clearObjectStore",
+          title: "clearObjectStoreByName",
           flag: "error",
           debugLevel: "warning",
           parameters: { event },
         });
+
+        onErrorCallback && onErrorCallback(event);
       },
       false
     );
   };
 
   /**
+   * Delete object store by store name.
+   * Call this method in onUpgradeneededCallback.
+   */
+  const deleteObjectStoreByName = ({
+    storeName,
+    onSuccessCallback,
+    onFailureCallback,
+  }: DeleteObjectStoreByNameProps) => {
+    try {
+      const database = getDatabase();
+      database?.deleteObjectStore(storeName);
+
+      // Execute callback.
+      onSuccessCallback && onSuccessCallback();
+    } catch (error) {
+      onFailureCallback && onFailureCallback();
+    }
+  };
+
+  /**
    * Add data into object store.
    */
-  const addObjectStore = <T>(storeName: string, data: T[]) => {
+  const addRow = <T>({
+    storeName,
+    data,
+    onSuccessCallback,
+    onErrorCallback,
+  }: AddRowProperties<T>) => {
     try {
-      const store = getObjectStore(storeName, "readwrite");
-      if (!store) throw new Error(`Does not found ${storeName} object store.`);
+      const objectStore = retrieveObjectStore(storeName, "readwrite");
+      if (!objectStore)
+        throw new Error(`Does not found ${storeName} object store.`);
 
-      const request = store.add(data);
+      const request = objectStore.add(data);
 
       request.addEventListener(
         "success",
@@ -207,13 +290,15 @@ export const useIndexedDatabase = ({
           try {
             const { result } = event.target as IDBOpenDBRequest;
             debug({
-              title: "addObjectStore",
+              title: "addRow",
               flag: "success",
               parameters: { result },
             });
+
+            onSuccessCallback && onSuccessCallback(result);
           } catch (error) {
             debug({
-              title: "addObjectStore",
+              title: "addRow",
               flag: "success:catch",
               description: (error as any).message,
             });
@@ -226,20 +311,87 @@ export const useIndexedDatabase = ({
         "error",
         (event: Event) => {
           debug({
-            title: "addObjectStore",
+            title: "addRow",
             flag: "error",
-            debugLevel: "error",
+            debugLevel: "warning",
             parameters: { event },
           });
+
+          onErrorCallback && onErrorCallback(event);
         },
         false
       );
     } catch (error) {
       debug({
-        title: "addObjectStore",
-        flag: "error:catch",
+        title: "addRow",
+        flag: "catch",
         debugLevel: "error",
         description: `${(error as any).message}`,
+      });
+    }
+  };
+
+  /**
+   * Remove row data of object store.
+   */
+  const removeRowById = ({
+    storeName,
+    id,
+    onSuccessCallback,
+    onErrorCallback,
+  }: RemoveRowProperties) => {
+    try {
+      const objectStore = retrieveObjectStore(storeName, "readwrite");
+      if (!objectStore)
+        throw new Error(`Does not found ${storeName} object store.`);
+
+      const request = objectStore.delete(id);
+
+      request.addEventListener(
+        "success",
+        (event: Event) => {
+          try {
+            const { result } = event.target as IDBOpenDBRequest;
+            debug({
+              title: "removeRow",
+              flag: "success",
+              parameters: { event },
+            });
+
+            // Execute callback.
+            onSuccessCallback && onSuccessCallback(result);
+          } catch (error) {
+            debug({
+              title: "removeRow",
+              flag: "success:catch",
+              description: (error as any).message,
+            });
+          }
+        },
+        false
+      );
+
+      request.addEventListener(
+        "error",
+        (event: Event) => {
+          debug({
+            title: "removeRow",
+            flag: "error",
+            debugLevel: "warning",
+            parameters: { event },
+          });
+
+          // Execute callback.
+          onErrorCallback && onErrorCallback(event);
+        },
+        false
+      );
+    } catch (error) {
+      debug({
+        title: "removeObjectStore",
+        flag: "catch",
+        debugLevel: "error",
+        description: (error as any).message,
       });
     }
   };
@@ -248,6 +400,11 @@ export const useIndexedDatabase = ({
    * Getting IndexedDB request instance.
    */
   const getRequest = () => __request__;
+
+  /**
+   * Setting IndexedDB request instance.
+   */
+  const setRequest = (request: IDBOpenDBRequest) => (__request__ = request);
 
   /**
    * Getting database list.
@@ -259,33 +416,99 @@ export const useIndexedDatabase = ({
    */
   const getDatabase = () => __database__;
 
-  // Initialize indexedDB.
-  (() => {
-    // This browser is supported?
+  /**
+   * Setting IndexedDB database instance.
+   */
+  const setDatabase = (database: IDBDatabase) => (__database__ = database);
+
+  /**
+   * Close IndexedDB database instance.
+   */
+  const closeDatabase = () => getDatabase()?.close();
+
+  /**
+   * Open IndexedDB database.
+   */
+  const openDatabase = ({
+    name,
+    version,
+    onOpenDatabase,
+  }: OpenDatabaseProperties): OpenDatabaseReturns => {
+    // This browser is not supported?
     if (!window.indexedDB) {
-      console.error(
-        `Your browser doesn't support a stable version of IndexedDB. Such and such feature will not be available.`
-      );
-      return;
+      debug({
+        title: "openDatabase",
+        debugLevel: "warning",
+        description: `Your browser doesn't support a stable version of IndexedDB. Such and such feature will not be available.`,
+        parameters: { name, version },
+      });
+      return {
+        ok: false,
+        error: `Your browser doesn't support a stable version of IndexedDB. Such and such feature will not be available.`,
+      };
     }
 
-    // Has database version?
-    __request__ = databaseVersion
-      ? window.indexedDB.open(databaseName, __databaseVersion__)
-      : window.indexedDB.open(databaseName);
+    // Already opened database?
+    closeDatabase();
 
-    __request__.addEventListener("blocked", onBlocked, false);
-    __request__.addEventListener("error", onError, false);
-    __request__.addEventListener("success", onSuccess, false);
-    __request__.addEventListener("upgradeneeded", onUpgradeNeeded, false);
-  })();
+    // Has database version?
+    const request = version
+      ? window.indexedDB.open(name, version)
+      : window.indexedDB.open(name);
+    // Set database open request.
+    setRequest(request);
+
+    // Set event listeners.
+    request.addEventListener("blocked", onBlocked, false);
+    request.addEventListener("error", onError, false);
+    request.addEventListener("success", onSuccess, false);
+    request.addEventListener("upgradeneeded", onUpgradeNeeded, false);
+
+    onOpenDatabase && onOpenDatabase();
+
+    return {
+      ok: true,
+      data: request,
+    };
+  };
+
+  /**
+   * Initialize indexedDB.
+   */
+  const initialize = () => {
+    const { ok, data, error } = openDatabase({
+      name: databaseName,
+      version: databaseVersion,
+    });
+
+    // Has problem?
+    if (!ok) {
+      return debug({
+        title: "initialize",
+        debugLevel: "warning",
+        flag: "ok",
+        description: error,
+        parameters: { name: databaseName, version: databaseVersion },
+      });
+    }
+  };
+
+  initialize();
 
   return {
     getRequest,
+    setRequest,
     getDatabases,
     getDatabase,
-    getObjectStore,
-    clearObjectStore,
-    addObjectStore,
+    setDatabase,
+    openDatabase,
+    closeDatabase,
+    createObjectStore,
+    retrieveObjectStore,
+    clearObjectStoreByName,
+    deleteObjectStoreByName,
+    addRow,
+    removeRowById,
+    getTransaction,
   };
 };
