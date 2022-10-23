@@ -1,3 +1,8 @@
+export interface CoreOutput {
+  ok: boolean;
+  error?: string;
+}
+
 export interface IndexedDbCommonCallbacks {
   onSuccessCallback?: (database: IDBDatabase) => void;
   onErrorCallback?: (event: Event) => void;
@@ -13,12 +18,21 @@ export interface UseIndexedDatabaseInputs extends IndexedSpecialCallbacks {
   databaseVersion?: number;
 }
 
-export interface AddRowProperties<T> extends IndexedDbCommonCallbacks {
+export interface CreateRowProperties<T> extends IndexedDbCommonCallbacks {
   storeName: string;
   data: T;
 }
 
-export interface RemoveRowProperties extends IndexedDbCommonCallbacks {
+export interface RetrieveRowProperties extends IndexedDbCommonCallbacks {
+  storeName: string;
+  id?: number;
+}
+
+export interface RetrieveRowReturns extends CoreOutput {
+  data?: IDBDatabase;
+}
+
+export interface DeleteRowProperties extends IndexedDbCommonCallbacks {
   storeName: string;
   id: number;
 }
@@ -60,8 +74,6 @@ export interface OpenDatabaseProperties {
   onOpenDatabase?: () => void;
 }
 
-export interface OpenDatabaseReturns {
-  ok: boolean;
+export interface OpenDatabaseReturns extends CoreOutput {
   data?: IDBOpenDBRequest;
-  error?: string;
 }

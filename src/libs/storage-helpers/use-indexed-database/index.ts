@@ -1,7 +1,8 @@
 import { debug } from "@/helpers/debug-helpers";
-import {
-  AddRowProperties,
-  RemoveRowProperties,
+import type {
+  CreateRowProperties,
+  RetrieveRowProperties,
+  DeleteRowProperties,
   ClearObjectStoreByNameProps,
   CreateObjectStoreProps,
   DeleteObjectStoreByNameProps,
@@ -9,6 +10,8 @@ import {
   OpenDatabaseReturns,
   TransactionMode,
   UseIndexedDatabaseInputs,
+  RetrieveRowReturns,
+  CoreOutput,
 } from "@/libs/storage-helpers/use-indexed-database/types";
 
 export const useIndexedDatabase = ({
@@ -269,14 +272,14 @@ export const useIndexedDatabase = ({
   };
 
   /**
-   * Add data into object store.
+   * Create data row into object store.
    */
-  const addRow = <T>({
+  const createRow = <T>({
     storeName,
     data,
     onSuccessCallback,
     onErrorCallback,
-  }: AddRowProperties<T>) => {
+  }: CreateRowProperties<T>) => {
     try {
       const objectStore = retrieveObjectStore(storeName, "readwrite");
       if (!objectStore)
@@ -290,7 +293,7 @@ export const useIndexedDatabase = ({
           try {
             const { result } = event.target as IDBOpenDBRequest;
             debug({
-              title: "addRow",
+              title: "createRow",
               flag: "success",
               parameters: { result },
             });
@@ -298,7 +301,7 @@ export const useIndexedDatabase = ({
             onSuccessCallback && onSuccessCallback(result);
           } catch (error) {
             debug({
-              title: "addRow",
+              title: "createRow",
               flag: "success:catch",
               description: (error as any).message,
             });
@@ -311,7 +314,7 @@ export const useIndexedDatabase = ({
         "error",
         (event: Event) => {
           debug({
-            title: "addRow",
+            title: "createRow",
             flag: "error",
             debugLevel: "warning",
             parameters: { event },
@@ -323,7 +326,7 @@ export const useIndexedDatabase = ({
       );
     } catch (error) {
       debug({
-        title: "addRow",
+        title: "createRow",
         flag: "catch",
         debugLevel: "error",
         description: `${(error as any).message}`,
@@ -332,14 +335,101 @@ export const useIndexedDatabase = ({
   };
 
   /**
-   * Remove row data of object store.
+   * Retrieve row data of object store.
    */
-  const removeRowById = ({
+  const retrieveRow = async <T>({
     storeName,
     id,
     onSuccessCallback,
     onErrorCallback,
-  }: RemoveRowProperties) => {
+  }: RetrieveRowProperties): Promise<RetrieveRowReturns> => {
+    try {
+      const objectStore = retrieveObjectStore(storeName);
+      if (!objectStore)
+        throw new Error(`Does not found ${storeName} object store.`);
+
+      const promise = new Promise<RetrieveRowReturns>((resolve, reject) => {
+        const request = objectStore.getAll();
+
+        request.addEventListener(
+          "success",
+          (event: Event) => {
+            try {
+              const { result } = event.target as IDBOpenDBRequest;
+              debug({
+                title: "retrieveRow",
+                flag: "success",
+                parameters: { result },
+              });
+
+              // Execute callback.
+              onSuccessCallback && onSuccessCallback(result);
+
+              resolve({
+                ok: true,
+                data: result,
+              });
+            } catch (error) {
+              debug({
+                title: "retrieveRow",
+                flag: "success:catch",
+                debugLevel: "warning",
+                parameters: { event },
+              });
+            }
+          },
+          false
+        );
+
+        request.addEventListener(
+          "error",
+          (event: Event) => {
+            debug({
+              title: "retrieveRow",
+              flag: "error",
+              debugLevel: "warning",
+              parameters: { event },
+            });
+
+            // Execute callback.
+            onErrorCallback && onErrorCallback(event);
+
+            reject({
+              ok: false,
+              error: "Failed retrieve row.",
+            });
+          },
+          false
+        );
+      });
+
+      return promise
+        .then<RetrieveRowReturns>((result) => result)
+        .catch((error: CoreOutput) => error);
+    } catch (error) {
+      debug({
+        title: "retrieveRow",
+        flag: "catch",
+        debugLevel: "error",
+        description: (error as any).message,
+      });
+
+      return {
+        ok: false,
+        error: (error as any).message,
+      };
+    }
+  };
+
+  /**
+   * Remove row data of object store.
+   */
+  const deleteRowById = ({
+    storeName,
+    id,
+    onSuccessCallback,
+    onErrorCallback,
+  }: DeleteRowProperties) => {
     try {
       const objectStore = retrieveObjectStore(storeName, "readwrite");
       if (!objectStore)
@@ -353,7 +443,7 @@ export const useIndexedDatabase = ({
           try {
             const { result } = event.target as IDBOpenDBRequest;
             debug({
-              title: "removeRow",
+              title: "deleteRow",
               flag: "success",
               parameters: { event },
             });
@@ -362,7 +452,7 @@ export const useIndexedDatabase = ({
             onSuccessCallback && onSuccessCallback(result);
           } catch (error) {
             debug({
-              title: "removeRow",
+              title: "deleteRow",
               flag: "success:catch",
               description: (error as any).message,
             });
@@ -375,7 +465,7 @@ export const useIndexedDatabase = ({
         "error",
         (event: Event) => {
           debug({
-            title: "removeRow",
+            title: "deleteRow",
             flag: "error",
             debugLevel: "warning",
             parameters: { event },
@@ -507,8 +597,9 @@ export const useIndexedDatabase = ({
     retrieveObjectStore,
     clearObjectStoreByName,
     deleteObjectStoreByName,
-    addRow,
-    removeRowById,
+    createRow,
+    retrieveRow,
+    deleteRowById,
     getTransaction,
   };
 };
