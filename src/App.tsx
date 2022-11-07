@@ -4,12 +4,15 @@ import "@/App.css";
 
 function App() {
   return (
-    <div className="main__container">
-      <article className="storage__container">
+    <main className="h-screen">
+      <header className="h-10 flex items-center justify-center">
         <StorageList />
+      </header>
+
+      <section className="h-full">
         <StorageContents />
-      </article>
-    </div>
+      </section>
+    </main>
   );
 }
 

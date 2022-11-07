@@ -9,7 +9,7 @@ export default function StorageContents() {
   const currentStorageType = useRecoilValue(currentStorageTypeAtom);
 
   return (
-    <div>
+    <article className="h-full">
       {(() => {
         switch (currentStorageType) {
           case StorageType.IndexedDB:
@@ -22,6 +22,6 @@ export default function StorageContents() {
             return <SessionStorage />;
         }
       })()}
-    </div>
+    </article>
   );
 }

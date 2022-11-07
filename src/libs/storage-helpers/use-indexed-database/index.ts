@@ -12,6 +12,8 @@ import type {
   UseIndexedDatabaseInputs,
   RetrieveRowReturns,
   CoreOutput,
+  UpdateRowProperties,
+  UpdateRowReturns,
 } from "@/libs/storage-helpers/use-indexed-database/types";
 
 export const useIndexedDatabase = ({
@@ -340,16 +342,17 @@ export const useIndexedDatabase = ({
   const retrieveRow = async <T>({
     storeName,
     id,
+    mode,
     onSuccessCallback,
     onErrorCallback,
-  }: RetrieveRowProperties): Promise<RetrieveRowReturns> => {
+  }: RetrieveRowProperties): Promise<RetrieveRowReturns<T>> => {
     try {
-      const objectStore = retrieveObjectStore(storeName);
+      const objectStore = retrieveObjectStore(storeName, mode);
       if (!objectStore)
         throw new Error(`Does not found ${storeName} object store.`);
 
-      const promise = new Promise<RetrieveRowReturns>((resolve, reject) => {
-        const request = objectStore.getAll();
+      const promise = new Promise<RetrieveRowReturns<T>>((resolve, reject) => {
+        const request = id ? objectStore.get(id) : objectStore.getAll();
 
         request.addEventListener(
           "success",
@@ -367,7 +370,7 @@ export const useIndexedDatabase = ({
 
               resolve({
                 ok: true,
-                data: result,
+                data: result as T,
               });
             } catch (error) {
               debug({
@@ -404,11 +407,106 @@ export const useIndexedDatabase = ({
       });
 
       return promise
-        .then<RetrieveRowReturns>((result) => result)
+        .then<RetrieveRowReturns<T>>((result) => result)
         .catch((error: CoreOutput) => error);
     } catch (error) {
       debug({
         title: "retrieveRow",
+        flag: "catch",
+        debugLevel: "error",
+        description: (error as any).message,
+      });
+
+      return {
+        ok: false,
+        error: (error as any).message,
+      };
+    }
+  };
+
+  /**
+   * Update row data of object store.
+   */
+  const updateRowById = async <T>({
+    storeName,
+    id,
+    data,
+    onSuccessCallback,
+    onErrorCallback,
+  }: UpdateRowProperties<T>): Promise<UpdateRowReturns> => {
+    try {
+      const objectStore = retrieveObjectStore(storeName, "readwrite");
+      if (!objectStore)
+        throw new Error(`Does not found ${storeName} object store`);
+
+      const promise = new Promise<UpdateRowReturns>((resolve, reject) => {
+        const getRequest = objectStore.get(id);
+
+        getRequest.addEventListener(
+          "success",
+          (_: Event) => {
+            // Put data.
+            const updateRequest = objectStore.put(data);
+
+            updateRequest.addEventListener("success", (event: Event) => {
+              const { result } = event.target as IDBOpenDBRequest;
+              debug({
+                title: "updateRowById",
+                flag: "success",
+                parameters: { result },
+              });
+
+              onSuccessCallback?.(result);
+
+              resolve({ ok: true });
+            });
+
+            updateRequest.addEventListener("error", (event: Event) => {
+              debug({
+                title: "updateRowById",
+                flag: "error",
+                debugLevel: "warning",
+                parameters: { event },
+              });
+
+              onErrorCallback?.(event);
+
+              reject({
+                ok: false,
+                error: "Failed update row by id.",
+              });
+            });
+          },
+          false
+        );
+
+        getRequest.addEventListener(
+          "error",
+          (event: Event) => {
+            debug({
+              title: "updateRowById",
+              flag: "retrieve",
+              debugLevel: "warning",
+              parameters: { event },
+            });
+
+            onErrorCallback?.(event);
+
+            reject({
+              ok: false,
+              error: "Failed retrieve row by id.",
+            });
+          },
+          false
+        );
+      });
+
+      return promise
+        .then<UpdateRowReturns>((result) => result)
+        .catch((error: CoreOutput) => error);
+    } catch (error) {
+      debug({
+        title: "updateRowById",
         flag: "catch",
         debugLevel: "error",
         description: (error as any).message,
@@ -478,7 +576,7 @@ export const useIndexedDatabase = ({
       );
     } catch (error) {
       debug({
-        title: "removeObjectStore",
+        title: "deleteRowById",
         flag: "catch",
         debugLevel: "error",
         description: (error as any).message,
@@ -599,6 +697,7 @@ export const useIndexedDatabase = ({
     deleteObjectStoreByName,
     createRow,
     retrieveRow,
+    updateRowById,
     deleteRowById,
     getTransaction,
   };

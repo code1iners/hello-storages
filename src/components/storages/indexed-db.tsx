@@ -1,27 +1,41 @@
+import { useForm } from "react-hook-form";
 import { useIndexedDatabase } from "@/libs/storage-helpers/use-indexed-database";
+import { useEffect, useMemo, useState } from "react";
 
-interface Member {
-  memberId?: number;
-  name: string;
-  age: number;
+interface PasswordInformation {
+  passwordId?: number;
+  title: string;
+  userId: string;
+  password: string;
 }
 
 export default function IndexedDb() {
   const DATABASE_VERSION = 1;
-  const { createRow, retrieveRow, deleteRowById, createObjectStore } =
-    useIndexedDatabase({
+  const [selectedPassword, setSelectedPassword] =
+    useState<PasswordInformation>();
+  const [passwords, setPasswords] = useState<PasswordInformation[]>([]);
+  const { register, handleSubmit, reset, setValue } =
+    useForm<PasswordInformation>();
+  const {
+    createRow,
+    retrieveRow,
+    updateRowById,
+    deleteRowById,
+    createObjectStore,
+  } = useMemo(() => {
+    return useIndexedDatabase({
       databaseName: "custom-database",
       databaseVersion: DATABASE_VERSION,
       onUpgradeneededCallback: (database) => {
         switch (database.version) {
           case 1:
-            createObjectStore<Member>({
+            createObjectStore<PasswordInformation>({
               storeName: `test-store-${database.version}`,
-              options: { autoIncrement: true, keyPath: "memberId" },
+              options: { autoIncrement: true, keyPath: "passwordId" },
               indexOptions: [
                 {
-                  keyPath: "memberId",
-                  name: "memberId",
+                  keyPath: "passwordId",
+                  name: "passwordId",
                   options: { unique: true },
                 },
               ],
@@ -30,47 +44,152 @@ export default function IndexedDb() {
             break;
 
           case 2:
-            createObjectStore<Member>({
-              storeName: `test-store-${database.version}`,
-              options: { autoIncrement: true, keyPath: "memberId" },
-              indexOptions: [
-                {
-                  keyPath: "memberId",
-                  name: "memberId",
-                  options: { unique: true },
-                },
-                {
-                  keyPath: "name",
-                  name: "name",
-                },
-                {
-                  keyPath: "age",
-                  name: "age",
-                },
-              ],
-            });
-
             break;
         }
       },
       onSuccessCallback: async () => {
-        const { ok, data, error } = await retrieveRow<Member>({
+        const { ok, data, error } = await retrieveRow<PasswordInformation[]>({
           storeName: "test-store-1",
         });
         if (!ok) return console.log(error);
-
-        console.log(data);
-
-        // createRow<Member>({
-        //   storeName: `test-store-${DATABASE_VERSION}`,
-        //   data: {
-        //     age: 50000,
-        //     name: "asdf",
-        //   },
-        // });
-        // deleteRowById({ storeName: "test-store-2", id: 3 });
+        setPasswords(data ?? passwords);
       },
     });
+  }, []);
 
-  return <div>Indexed DB</div>;
+  function onSubmit(form: PasswordInformation) {
+    if (selectedPassword && selectedPassword.passwordId) {
+      updateRowById<PasswordInformation>({
+        storeName: "test-store-1",
+        id: selectedPassword.passwordId,
+        data: { ...form },
+        onSuccessCallback: async (_) => {
+          const { ok, data, error } = await retrieveRow<PasswordInformation>({
+            storeName: "test-store-1",
+            id: selectedPassword.passwordId,
+          });
+          if (!ok || !data) return console.error(error);
+
+          setPasswords((prev) =>
+            prev.map((p) => (p.passwordId !== data?.passwordId ? p : data))
+          );
+        },
+      });
+    } else {
+      createRow<PasswordInformation>({
+        storeName: "test-store-1",
+        data: { ...form },
+        onSuccessCallback: async (_) => {
+          const { ok, data, error } = await retrieveRow<PasswordInformation[]>({
+            storeName: "test-store-1",
+          });
+          if (!ok) return console.error(error);
+
+          // Set passwords.
+          setPasswords(data ?? passwords);
+
+          // Clear input fields.
+          reset();
+        },
+      });
+    }
+  }
+
+  async function onRetrievePasswordClick(passwordId: number | undefined) {
+    if (!passwordId) return;
+
+    const { ok, data, error } = await retrieveRow<PasswordInformation>({
+      storeName: "test-store-1",
+      id: passwordId,
+    });
+    if (!ok) return console.error(error);
+    setSelectedPassword(data);
+  }
+
+  function onRemovePasswordClick(passwordId: number | undefined) {
+    if (!passwordId) return;
+
+    deleteRowById({
+      storeName: "test-store-1",
+      id: passwordId,
+      onSuccessCallback: () => {
+        setPasswords((prev) =>
+          prev.filter((password) => password.passwordId !== passwordId)
+        );
+      },
+    });
+  }
+
+  function onReleaseClick() {
+    setSelectedPassword(undefined);
+  }
+
+  useEffect(() => {
+    if (selectedPassword) {
+      setValue("passwordId", selectedPassword.passwordId);
+      setValue("title", selectedPassword.title);
+      setValue("userId", selectedPassword.userId);
+      setValue("password", selectedPassword.password);
+    } else {
+      reset();
+    }
+  }, [selectedPassword]);
+
+  return (
+    <section className="flex flex-col justify-center items-center h-full">
+      <div className="flex items-center gap-2">
+        <h1 className="text-red-500">Indexed DB</h1>
+        {selectedPassword ? (
+          <button onClick={onReleaseClick}>clear</button>
+        ) : null}
+      </div>
+
+      <div className="">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-2">
+          {selectedPassword ? (
+            <input
+              className="border rounded-md p-2"
+              type="text"
+              placeholder="password id"
+              disabled
+              {...register("passwordId")}
+            />
+          ) : null}
+          <input
+            className="border rounded-md p-2"
+            type="text"
+            placeholder="title"
+            {...register("title", { required: "Title is required." })}
+          />
+          <input
+            className="border rounded-md p-2"
+            type="text"
+            placeholder="user id"
+            {...register("userId", { required: "User id is required." })}
+          />
+          <input
+            className="border rounded-md p-2"
+            type="password"
+            placeholder="password"
+            {...register("password", { required: "Password id is required." })}
+          />
+          <button type="submit">Submit</button>
+        </form>
+      </div>
+
+      <div className="">
+        {passwords.map(({ passwordId, title, userId, password }) => (
+          <li className="flex items-center gap-2" key={passwordId}>
+            <div
+              onClick={() => onRetrievePasswordClick(passwordId)}
+              className="flex items-center gap-1 border rounded-md p-2 cursor-pointer"
+            >
+              <span>{title}</span>
+            </div>
+            <button onClick={() => onRemovePasswordClick(passwordId)}>x</button>
+          </li>
+        ))}
+      </div>
+    </section>
+  );
 }

@@ -9,18 +9,22 @@ export default function StorageList() {
     setCurrentStorageType(storageType);
 
   return (
-    <section className="storage-type-list__container">
-      <ul>
-        <li onClick={() => onStorageTypeClick(StorageType.IndexedDB)}>
+    <ul className="flex justify-center items-center gap-5">
+      <li>
+        <button onClick={() => onStorageTypeClick(StorageType.IndexedDB)}>
           indexedDB
-        </li>
-        <li onClick={() => onStorageTypeClick(StorageType.LocalStorage)}>
+        </button>
+      </li>
+      <li>
+        <button onClick={() => onStorageTypeClick(StorageType.LocalStorage)}>
           local storage
-        </li>
-        <li onClick={() => onStorageTypeClick(StorageType.SessionStorage)}>
+        </button>
+      </li>
+      <li>
+        <button onClick={() => onStorageTypeClick(StorageType.SessionStorage)}>
           session storage
-        </li>
-      </ul>
-    </section>
+        </button>
+      </li>
+    </ul>
   );
 }

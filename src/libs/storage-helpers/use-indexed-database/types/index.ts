@@ -26,11 +26,20 @@ export interface CreateRowProperties<T> extends IndexedDbCommonCallbacks {
 export interface RetrieveRowProperties extends IndexedDbCommonCallbacks {
   storeName: string;
   id?: number;
+  mode?: TransactionMode;
 }
 
-export interface RetrieveRowReturns extends CoreOutput {
-  data?: IDBDatabase;
+export interface RetrieveRowReturns<T> extends CoreOutput {
+  data?: T;
 }
+
+export interface UpdateRowProperties<T> extends IndexedDbCommonCallbacks {
+  storeName: string;
+  id: number;
+  data: T;
+}
+
+export interface UpdateRowReturns extends CoreOutput {}
 
 export interface DeleteRowProperties extends IndexedDbCommonCallbacks {
   storeName: string;
