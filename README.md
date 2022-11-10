@@ -11,4 +11,4 @@ This is a simple web application for storage Web APIs testing.
 ## Tasks.
 
 - [x] Implement indexed database helper CRUD features.
-- [ ] Fix indexed database helper response pattern.
+- [x] Fix indexed database helper response pattern.

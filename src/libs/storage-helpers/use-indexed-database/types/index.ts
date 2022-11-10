@@ -23,6 +23,10 @@ export interface CreateRowProperties<T> extends IndexedDbCommonCallbacks {
   data: T;
 }
 
+export interface CreateRowReturns extends CoreOutput {
+  data?: IDBDatabase;
+}
+
 export interface RetrieveRowProperties extends IndexedDbCommonCallbacks {
   storeName: string;
   id?: number;
@@ -39,11 +43,17 @@ export interface UpdateRowProperties<T> extends IndexedDbCommonCallbacks {
   data: T;
 }
 
-export interface UpdateRowReturns extends CoreOutput {}
+export interface UpdateRowReturns extends CoreOutput {
+  data?: IDBDatabase;
+}
 
 export interface DeleteRowProperties extends IndexedDbCommonCallbacks {
   storeName: string;
   id: number;
+}
+
+export interface DeleteRowReturns extends CoreOutput {
+  data?: IDBDatabase;
 }
 
 export interface ClearObjectStoreByNameProps {

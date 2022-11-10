@@ -57,41 +57,70 @@ export default function IndexedDb() {
     });
   }, []);
 
-  function onSubmit(form: PasswordInformation) {
+  async function onSubmit(form: PasswordInformation) {
     if (selectedPassword && selectedPassword.passwordId) {
-      updateRowById<PasswordInformation>({
+      // Update row.
+      const { ok: updateRowOk, error: updateRowError } =
+        await updateRowById<PasswordInformation>({
+          storeName: "test-store-1",
+          id: selectedPassword.passwordId,
+          data: { ...form },
+        });
+
+      // Has problem?
+      if (!updateRowOk) return console.error(updateRowError);
+
+      // Retrieve row.
+      const {
+        ok: retrieveRowOk,
+        data: retrieveRowData,
+        error: retrieveRowError,
+      } = await retrieveRow<PasswordInformation>({
         storeName: "test-store-1",
         id: selectedPassword.passwordId,
-        data: { ...form },
-        onSuccessCallback: async (_) => {
-          const { ok, data, error } = await retrieveRow<PasswordInformation>({
-            storeName: "test-store-1",
-            id: selectedPassword.passwordId,
-          });
-          if (!ok || !data) return console.error(error);
-
-          setPasswords((prev) =>
-            prev.map((p) => (p.passwordId !== data?.passwordId ? p : data))
-          );
-        },
       });
+
+      // Has problem?
+      if (!retrieveRowOk || !retrieveRowData)
+        return console.error(retrieveRowError);
+
+      // Set state.
+      setPasswords((prev) =>
+        prev.map((p) =>
+          p.passwordId !== retrieveRowData?.passwordId ? p : retrieveRowData
+        )
+      );
     } else {
-      createRow<PasswordInformation>({
+      // Create row.
+      const {
+        ok: createRowOk,
+        error: createRowError,
+        data: createRowData,
+      } = await createRow<PasswordInformation>({
         storeName: "test-store-1",
         data: { ...form },
-        onSuccessCallback: async (_) => {
-          const { ok, data, error } = await retrieveRow<PasswordInformation[]>({
-            storeName: "test-store-1",
-          });
-          if (!ok) return console.error(error);
-
-          // Set passwords.
-          setPasswords(data ?? passwords);
-
-          // Clear input fields.
-          reset();
-        },
       });
+
+      console.log(createRowData);
+      // Has problem?
+      if (!createRowOk) return console.error(createRowError);
+
+      // Retrieve row.
+      const {
+        ok: retrieveOk,
+        data: retrieveData,
+        error: retrieveError,
+      } = await retrieveRow<PasswordInformation[]>({
+        storeName: "test-store-1",
+      });
+      // Has problem?
+      if (!retrieveOk) return console.error(retrieveError);
+
+      // Set passwords.
+      setPasswords(retrieveData ?? passwords);
+
+      // Clear input fields.
+      reset();
     }
   }
 
@@ -106,18 +135,19 @@ export default function IndexedDb() {
     setSelectedPassword(data);
   }
 
-  function onRemovePasswordClick(passwordId: number | undefined) {
+  async function onRemovePasswordClick(passwordId: number | undefined) {
     if (!passwordId) return;
 
-    deleteRowById({
+    const { ok, error } = await deleteRowById({
       storeName: "test-store-1",
       id: passwordId,
-      onSuccessCallback: () => {
-        setPasswords((prev) =>
-          prev.filter((password) => password.passwordId !== passwordId)
-        );
-      },
     });
+
+    if (!ok) return console.error(error);
+
+    setPasswords((prev) =>
+      prev.filter((password) => password.passwordId !== passwordId)
+    );
   }
 
   function onReleaseClick() {

@@ -1,19 +1,21 @@
 import { debug } from "@/helpers/debug-helpers";
 import type {
-  CreateRowProperties,
-  RetrieveRowProperties,
-  DeleteRowProperties,
-  ClearObjectStoreByNameProps,
-  CreateObjectStoreProps,
-  DeleteObjectStoreByNameProps,
+  CoreOutput,
+  UseIndexedDatabaseInputs,
   OpenDatabaseProperties,
   OpenDatabaseReturns,
   TransactionMode,
-  UseIndexedDatabaseInputs,
+  CreateRowProperties,
+  CreateRowReturns,
+  RetrieveRowProperties,
   RetrieveRowReturns,
-  CoreOutput,
   UpdateRowProperties,
   UpdateRowReturns,
+  DeleteRowProperties,
+  DeleteRowReturns,
+  ClearObjectStoreByNameProps,
+  CreateObjectStoreProps,
+  DeleteObjectStoreByNameProps,
 } from "@/libs/storage-helpers/use-indexed-database/types";
 
 export const useIndexedDatabase = ({
@@ -276,56 +278,68 @@ export const useIndexedDatabase = ({
   /**
    * Create data row into object store.
    */
-  const createRow = <T>({
+  const createRow = async <T>({
     storeName,
     data,
     onSuccessCallback,
     onErrorCallback,
-  }: CreateRowProperties<T>) => {
+  }: CreateRowProperties<T>): Promise<CreateRowReturns> => {
     try {
       const objectStore = retrieveObjectStore(storeName, "readwrite");
       if (!objectStore)
         throw new Error(`Does not found ${storeName} object store.`);
 
-      const request = objectStore.add(data);
+      const promise = new Promise<CreateRowReturns>((resolve, reject) => {
+        const request = objectStore.add(data);
 
-      request.addEventListener(
-        "success",
-        (event: Event) => {
-          try {
-            const { result } = event.target as IDBOpenDBRequest;
+        request.addEventListener(
+          "success",
+          (event: Event) => {
+            try {
+              const { result } = event.target as IDBOpenDBRequest;
+              debug({
+                title: "createRow",
+                flag: "success",
+                parameters: { result },
+              });
+
+              onSuccessCallback && onSuccessCallback(result);
+
+              resolve({ ok: true, data: result });
+            } catch (error) {
+              debug({
+                title: "createRow",
+                flag: "success:catch",
+                description: (error as any).message,
+              });
+
+              reject({ ok: false, error: (error as any).message });
+            }
+          },
+          false
+        );
+
+        request.addEventListener(
+          "error",
+          (event: Event) => {
             debug({
               title: "createRow",
-              flag: "success",
-              parameters: { result },
+              flag: "error",
+              debugLevel: "warning",
+              parameters: { event },
             });
 
-            onSuccessCallback && onSuccessCallback(result);
-          } catch (error) {
-            debug({
-              title: "createRow",
-              flag: "success:catch",
-              description: (error as any).message,
-            });
-          }
-        },
-        false
-      );
+            onErrorCallback && onErrorCallback(event);
 
-      request.addEventListener(
-        "error",
-        (event: Event) => {
-          debug({
-            title: "createRow",
-            flag: "error",
-            debugLevel: "warning",
-            parameters: { event },
-          });
+            reject({ ok: false, error: "Failed add into object store." });
+          },
+          false
+        );
+      });
 
-          onErrorCallback && onErrorCallback(event);
-        },
-        false
-      );
+      return promise
+        .then((result) => result)
+        .catch((error: CoreOutput) => error);
     } catch (error) {
       debug({
         title: "createRow",
@@ -333,6 +347,11 @@ export const useIndexedDatabase = ({
         debugLevel: "error",
         description: `${(error as any).message}`,
       });
+
+      return {
+        ok: false,
+        error: (error as any).message,
+      };
     }
   };
 
@@ -377,7 +396,14 @@ export const useIndexedDatabase = ({
                 title: "retrieveRow",
                 flag: "success:catch",
                 debugLevel: "warning",
+                description: (error as any).message,
                 parameters: { event },
+              });
+
+              reject({
+                ok: false,
+                error: (error as any).message,
+                data: event,
               });
             }
           },
@@ -400,6 +426,7 @@ export const useIndexedDatabase = ({
             reject({
               ok: false,
               error: "Failed retrieve row.",
+              data: event,
             });
           },
           false
@@ -407,7 +434,7 @@ export const useIndexedDatabase = ({
       });
 
       return promise
-        .then<RetrieveRowReturns<T>>((result) => result)
+        .then((result) => result)
         .catch((error: CoreOutput) => error);
     } catch (error) {
       debug({
@@ -458,7 +485,7 @@ export const useIndexedDatabase = ({
 
               onSuccessCallback?.(result);
 
-              resolve({ ok: true });
+              resolve({ ok: true, data: result });
             });
 
             updateRequest.addEventListener("error", (event: Event) => {
@@ -495,6 +522,7 @@ export const useIndexedDatabase = ({
             reject({
               ok: false,
               error: "Failed retrieve row by id.",
+              data: event,
             });
           },
           false
@@ -522,58 +550,80 @@ export const useIndexedDatabase = ({
   /**
    * Remove row data of object store.
    */
-  const deleteRowById = ({
+  const deleteRowById = async ({
     storeName,
     id,
     onSuccessCallback,
     onErrorCallback,
-  }: DeleteRowProperties) => {
+  }: DeleteRowProperties): Promise<DeleteRowReturns> => {
     try {
       const objectStore = retrieveObjectStore(storeName, "readwrite");
       if (!objectStore)
         throw new Error(`Does not found ${storeName} object store.`);
 
-      const request = objectStore.delete(id);
+      const promise = new Promise<DeleteRowReturns>((resolve, reject) => {
+        const request = objectStore.delete(id);
 
-      request.addEventListener(
-        "success",
-        (event: Event) => {
-          try {
-            const { result } = event.target as IDBOpenDBRequest;
+        request.addEventListener(
+          "success",
+          (event: Event) => {
+            try {
+              const { result } = event.target as IDBOpenDBRequest;
+              debug({
+                title: "deleteRow",
+                flag: "success",
+                parameters: { result },
+              });
+
+              // Execute callback.
+              onSuccessCallback && onSuccessCallback(result);
+
+              resolve({
+                ok: true,
+                data: result,
+              });
+            } catch (error) {
+              debug({
+                title: "deleteRow",
+                flag: "success:catch",
+                description: (error as any).message,
+              });
+
+              reject({
+                ok: false,
+                error: (error as any).message,
+              });
+            }
+          },
+          false
+        );
+
+        request.addEventListener(
+          "error",
+          (event: Event) => {
             debug({
               title: "deleteRow",
-              flag: "success",
+              flag: "error",
+              debugLevel: "warning",
               parameters: { event },
             });
 
             // Execute callback.
-            onSuccessCallback && onSuccessCallback(result);
-          } catch (error) {
-            debug({
-              title: "deleteRow",
-              flag: "success:catch",
-              description: (error as any).message,
+            onErrorCallback && onErrorCallback(event);
+
+            reject({
+              ok: false,
+              error: "Failed delete row.",
+              data: event,
             });
-          }
-        },
-        false
-      );
+          },
+          false
+        );
+      });
 
-      request.addEventListener(
-        "error",
-        (event: Event) => {
-          debug({
-            title: "deleteRow",
-            flag: "error",
-            debugLevel: "warning",
-            parameters: { event },
-          });
-
-          // Execute callback.
-          onErrorCallback && onErrorCallback(event);
-        },
-        false
-      );
+      return promise
+        .then((result) => result)
+        .catch((error: CoreOutput) => error);
     } catch (error) {
       debug({
         title: "deleteRowById",
@@ -581,6 +631,11 @@ export const useIndexedDatabase = ({
         debugLevel: "error",
         description: (error as any).message,
       });
+
+      return {
+        ok: false,
+        error: (error as any).message,
+      };
     }
   };
 
@@ -661,6 +716,12 @@ export const useIndexedDatabase = ({
   };
 
   /**
+   * Getting database version.
+   * @returns {number} Database version.
+   */
+  const getDatabaseVersion = () => __databaseVersion__;
+
+  /**
    * Initialize indexedDB.
    */
   const initialize = () => {
@@ -679,6 +740,14 @@ export const useIndexedDatabase = ({
         parameters: { name: databaseName, version: databaseVersion },
       });
     }
+
+    debug({
+      title: "initialize",
+      debugLevel: "info",
+      flag: "success",
+      description: "Database initialize success.",
+      parameters: { data },
+    });
   };
 
   initialize();
@@ -700,5 +769,6 @@ export const useIndexedDatabase = ({
     updateRowById,
     deleteRowById,
     getTransaction,
+    getDatabaseVersion,
   };
 };
